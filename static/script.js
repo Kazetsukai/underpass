@@ -1,11 +1,4 @@
-function checkState() {
-  fetch("./state")
-    .then((response) => response.json())
-    .then((data) => {
-      document.querySelector("#boolToggle").checked = data;
-    });
-}
-
+// Ignore calls for a short time after first call
 function debounce_leading(func, timeout = 300) {
   let timer;
   return (...args) => {
@@ -22,20 +15,25 @@ function debounce_leading(func, timeout = 300) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  document.querySelector("#boolToggle").addEventListener(
+  const lightingToggle = document.querySelector("#lightingToggle");
+
+  function checkState() {
+    fetch("./state")
+      .then((response) => response.json())
+      .then((data) => {
+        lightingToggle.checked = data;
+      });
+  }
+
+  lightingToggle.addEventListener(
     "click",
     debounce_leading(function () {
-      fetch("./toggle", { method: "POST" })
+      fetch("./power", { method: "POST" })
         .then((a) => a.json())
         .then((state) => {
-          document.querySelector("#boolToggle").checked = state;
+          lightingToggle.checked = state;
         });
       return false;
     })
   );
-
-  let params = new URLSearchParams(window.location.search);
-  if (params.has("watch")) {
-    setInterval(checkState, 1000);
-  }
 });

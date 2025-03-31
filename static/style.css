@@ -92,14 +92,14 @@ input[type="color"] {
 }
 
 /* Apply the toggle button styles to the boolToggle checkbox */
-#boolToggle {
+#lightingToggle {
   display: none;
 }
-#boolToggle:checked + .toggle-button {
+#lightingToggle:checked + .toggle-button {
   background-color: #6d6d6d;
   border-color: #cecece;
 }
-#boolToggle:checked + .toggle-button::before {
+#lightingToggle:checked + .toggle-button::before {
   transform: translateX(30px);
   background-color: #31f35b;
   border-color: #ffffff;
