@@ -1,7 +1,13 @@
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
+use picoserve::response::IntoResponse;
 
+use crate::streetlamps::StreetlampMode;
+
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct SharedState {
-    pub power: bool,
+    pub streetlamps_enabled: bool,
+    pub streetlamps_brightness: u8,
+    pub streetlamps_modes: [StreetlampMode; 6],
 }
 
 #[derive(Clone, Copy)]

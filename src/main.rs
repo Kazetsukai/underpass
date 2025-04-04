@@ -2,16 +2,18 @@
 #![no_main]
 #![feature(impl_trait_in_assoc_type)]
 
-mod hid_descriptor;
-mod joystick;
 mod network;
+mod pins;
 mod state;
+mod streetlamps;
 mod usb_device;
 mod usb_ethernet;
 mod web;
 
-static DEVICE_NAME: &str = "Custom Joystick";
-static DEVICE_HOST: &str = "joystick";
+mod rp;
+
+static DEVICE_NAME: &str = "Underpass Diorama";
+static DEVICE_HOST: &str = "road";
 
 static OUR_IP: Ipv4Addr = Ipv4Addr::new(10, 42, 0, 1);
 static DNS_SERVERS: [Ipv4Addr; 1] = [OUR_IP];
@@ -34,11 +36,11 @@ use {
     embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex},
     embassy_time::{Duration, Timer},
     embassy_usb::{class::cdc_ncm::embassy_net::Device, UsbDevice},
-    joystick::JoystickRunner,
     panic_probe as _,
     picoserve::make_static,
     rand::RngCore,
-    state::{AppState, SharedState},
+    state::{AppState, SharedState, SharedStateMutex},
+    streetlamps::StreetlampsRunner,
 };
 
 bind_interrupts!(struct Irqs {
@@ -52,7 +54,20 @@ async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
     let led = Output::new(AnyPin::from(p.PIN_22), Level::Low);
 
-    let shared_state = make_static!(Mutex<CriticalSectionRawMutex, SharedState>, Mutex::new(SharedState { power: true }));
+    let shared_state = SharedStateMutex(
+        make_static!(Mutex<CriticalSectionRawMutex, SharedState>, Mutex::new(SharedState {
+            streetlamps_enabled: true,
+            streetlamps_brightness: 255,
+            streetlamps_modes: [
+                streetlamps::StreetlampMode::On,
+                streetlamps::StreetlampMode::On,
+                streetlamps::StreetlampMode::On,
+                streetlamps::StreetlampMode::On,
+                streetlamps::StreetlampMode::On,
+                streetlamps::StreetlampMode::On,
+            ],
+        })),
+    );
 
     Timer::after_millis(100).await;
 
@@ -65,20 +80,16 @@ async fn main(spawner: Spawner) {
     let mut builder = usb_device::get_usb_builder(usb_driver);
     let (ncm_runner, device) = usb_ethernet::make_usb_ethernet_device(&mut builder);
     let (net_runner, stack) = network::make_network_stack(device, seed);
-    let (joystick_runner, hid_runner) = joystick::make_joystick(
-        &mut builder,
-        embassy_rp::adc::Adc::new(p.ADC, Irqs, embassy_rp::adc::Config::default()),
-        p.PIN_26,
-        p.PIN_27,
-        p.PIN_28,
-        p.PIN_20,
-        p.PIN_21,
-        p.PIN_2,
-        p.PIN_3,
-        p.PIN_4,
-        p.PIN_5,
-        p.PIN_6,
-        p.PIN_7,
+    let (streetlamps_runner) = streetlamps::StreetlampsRunner::new(
+        [
+            Output::new(p.PIN_2, Level::Low),
+            Output::new(p.PIN_3, Level::Low),
+            Output::new(p.PIN_4, Level::Low),
+            Output::new(p.PIN_5, Level::Low),
+            Output::new(p.PIN_6, Level::Low),
+            Output::new(p.PIN_7, Level::Low),
+        ],
+        rng,
         shared_state,
     );
     let usb = builder.build();
@@ -107,7 +118,7 @@ async fn main(spawner: Spawner) {
             id,
             stack,
             AppState {
-                shared: state::SharedStateMutex(shared_state),
+                shared: shared_state,
             },
             app,
             config,
@@ -115,11 +126,8 @@ async fn main(spawner: Spawner) {
     }
     info!("Web task started");
 
-    spawner.must_spawn(hid_task(hid_runner));
-    info!("HID task started");
-
-    spawner.must_spawn(joystick_task(joystick_runner));
-    info!("Joystick task started");
+    spawner.must_spawn(streetlamp_task(streetlamps_runner));
+    info!("Streetlamp task started");
 
     loop {
         Timer::after(Duration::from_secs(3)).await;
@@ -154,11 +162,6 @@ pub(crate) async fn net_task(mut runner: embassy_net::Runner<'static, Device<'st
 }
 
 #[embassy_executor::task]
-async fn hid_task(runner: joystick::HidResponderRunner<'static, Driver<'static, USB>>) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn joystick_task(mut runner: JoystickRunner<Driver<'static, USB>>) -> ! {
+async fn streetlamp_task(mut runner: StreetlampsRunner<Output<'static>, RoscRng, 6>) -> ! {
     runner.run().await
 }

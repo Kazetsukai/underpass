@@ -1,17 +1,21 @@
+use edge_mdns::domain::dep::octseq::parse;
 use embassy_net::Stack;
 use embassy_time::Duration;
 use picoserve::{
     extract::{self, State},
     make_static,
     response::{json, File, IntoResponse},
-    routing::{get, get_service, post},
+    routing::{get, get_service, parse_path_segment, post},
     AppRouter, AppWithStateBuilder, Config,
 };
 
-use crate::state::{AppState, SharedStateMutex};
+use crate::{
+    state::{AppState, SharedStateMutex},
+    streetlamps,
+};
 
 const INDEX_HTML: &str = include_str!("../static/index.html");
-const STYLE_CSS: &str = include_str!("../static/style.css");
+const STYLE_CSS: &[u8] = include_bytes!("../static/pico.slate.min.css.gz");
 const SCRIPT_JS: &str = include_str!("../static/script.js");
 
 pub struct AppProps;
@@ -19,7 +23,7 @@ pub struct AppProps;
 pub async fn get_state(
     extract::State(SharedStateMutex(shared)): extract::State<SharedStateMutex>,
 ) -> impl IntoResponse {
-    json::Json((*shared.lock().await).power)
+    json::Json(shared.lock().await.clone())
 }
 
 impl AppWithStateBuilder for AppProps {
@@ -29,16 +33,40 @@ impl AppWithStateBuilder for AppProps {
     fn build_app(self) -> picoserve::Router<Self::PathRouter, Self::State> {
         picoserve::Router::new()
             .route("/", get_service(File::html(INDEX_HTML)))
-            .route("/style.css", get_service(File::css(STYLE_CSS)))
+            .route(
+                "/style.css",
+                get_service(File::with_content_type_and_headers(
+                    "text/css",
+                    STYLE_CSS,
+                    &[("Content-Encoding", "gzip")],
+                )),
+            )
             .route("/script.js", get_service(File::javascript(SCRIPT_JS)))
             .route("/state", get(get_state))
             .route(
                 "/power",
                 post(
                     |State(SharedStateMutex(shared)): State<SharedStateMutex>| async {
-                        let power = &mut shared.lock().await.power;
+                        let power = &mut shared.lock().await.streetlamps_enabled;
                         *power = !*power;
                         json::Json(*power)
+                    },
+                ),
+            )
+            .route(
+                ("/lamp", parse_path_segment(), parse_path_segment()),
+                post(
+                    |(id, state): (usize, u8),
+                     State(SharedStateMutex(shared)): State<SharedStateMutex>| async move {
+                        let mut shared = shared.lock().await;
+                        if id < shared.streetlamps_modes.len() {
+                            shared.streetlamps_modes[id as usize] = match state {
+                                0 => streetlamps::StreetlampMode::Off,
+                                1 => streetlamps::StreetlampMode::On,
+                                2 => streetlamps::StreetlampMode::Flickering { chance: 90 },
+                                _ => streetlamps::StreetlampMode::Off,
+                            };
+                        }
                     },
                 ),
             )
