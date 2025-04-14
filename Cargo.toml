@@ -21,10 +21,7 @@ embassy-rp = { version = "0.3", features = [
   "critical-section-impl",
   "rp2040",
 ] }
-embassy-time = { version = "0.4.0", features = [
-  "defmt",
-  "defmt-timestamp-uptime",
-] }
+embassy-time = { version = "0.4.0", features = ["defmt", "defmt-timestamp-uptime"] }
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 pio-proc = "0.2.2"
 pio = "0.2.1"
@@ -61,3 +58,4 @@ edge-mdns = "0.5"
 edge-nal-embassy = "0.5"
 edge-nal = "0.5"
 edge-captive = "0.5"
+smart-leds = { version = "0.4.0", features = ["serde"] }

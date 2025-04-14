@@ -6,6 +6,7 @@ mod network;
 mod pins;
 mod state;
 mod streetlamps;
+mod underpass_lights;
 mod usb_device;
 mod usb_ethernet;
 mod web;
@@ -30,7 +31,8 @@ use {
         clocks::RoscRng,
         gpio::{AnyPin, Level, Output},
         i2c::InterruptHandler,
-        peripherals::{I2C1, USB},
+        peripherals::{I2C1, PIN_8, PIO0, USB},
+        pio::Pio,
         usb::{self, Driver},
     },
     embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex},
@@ -39,6 +41,7 @@ use {
     panic_probe as _,
     picoserve::make_static,
     rand::RngCore,
+    smart_leds::RGB8,
     state::{AppState, SharedState, SharedStateMutex},
     streetlamps::StreetlampsRunner,
 };
@@ -47,10 +50,11 @@ bind_interrupts!(struct Irqs {
     I2C1_IRQ => InterruptHandler<I2C1>;
     USBCTRL_IRQ => usb::InterruptHandler<USB>;
     ADC_IRQ_FIFO => adc::InterruptHandler;
+    PIO0_IRQ_0 => embassy_rp::pio::InterruptHandler<PIO0>;
 });
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
+async fn main(spawner: Spawner) -> ! {
     let p = embassy_rp::init(Default::default());
     let led = Output::new(AnyPin::from(p.PIN_22), Level::Low);
 
@@ -66,6 +70,9 @@ async fn main(spawner: Spawner) {
                 streetlamps::StreetlampMode::On,
                 streetlamps::StreetlampMode::On,
             ],
+            underpass_lights_state: underpass_lights::LightingState::Cars {
+                default_color: RGB8::new(40, 20, 2),
+            }
         })),
     );
 
@@ -80,7 +87,7 @@ async fn main(spawner: Spawner) {
     let mut builder = usb_device::get_usb_builder(usb_driver);
     let (ncm_runner, device) = usb_ethernet::make_usb_ethernet_device(&mut builder);
     let (net_runner, stack) = network::make_network_stack(device, seed);
-    let (streetlamps_runner) = streetlamps::StreetlampsRunner::new(
+    let streetlamps_runner = streetlamps::StreetlampsRunner::new(
         [
             Output::new(p.PIN_2, Level::Low),
             Output::new(p.PIN_3, Level::Low),
@@ -89,7 +96,7 @@ async fn main(spawner: Spawner) {
             Output::new(p.PIN_6, Level::Low),
             Output::new(p.PIN_7, Level::Low),
         ],
-        rng,
+        RoscRng,
         shared_state,
     );
     let usb = builder.build();
@@ -129,6 +136,16 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(streetlamp_task(streetlamps_runner));
     info!("Streetlamp task started");
 
+    spawner.must_spawn(underpass_lights_task(
+        underpass_lights::UnderpassLightsRunner::new(
+            Pio::new(p.PIO0, Irqs),
+            p.PIN_8,
+            p.DMA_CH0,
+            RoscRng,
+            shared_state,
+        ),
+    ));
+
     loop {
         Timer::after(Duration::from_secs(3)).await;
     }
@@ -163,5 +180,12 @@ pub(crate) async fn net_task(mut runner: embassy_net::Runner<'static, Device<'st
 
 #[embassy_executor::task]
 async fn streetlamp_task(mut runner: StreetlampsRunner<Output<'static>, RoscRng, 6>) -> ! {
+    runner.run().await
+}
+
+#[embassy_executor::task]
+async fn underpass_lights_task(
+    runner: underpass_lights::UnderpassLightsRunner<RoscRng, PIN_8>,
+) -> ! {
     runner.run().await
 }

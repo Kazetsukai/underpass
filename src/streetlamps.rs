@@ -1,5 +1,3 @@
-const NUM_LAMPS: usize = 6;
-
 use embassy_time::{Duration, Timer};
 use rand::RngCore;
 
