@@ -52,7 +52,7 @@ use {
     },
     smart_leds::RGB8,
     state::{AppState, SharedState, SharedStateMutex},
-    streetlamps::{StreetlampMode, StreetlampsRunner},
+    streetlamps::StreetlampsRunner,
 };
 
 bind_interrupts!(struct Irqs {
@@ -213,8 +213,8 @@ async fn main(spawner: Spawner) -> ! {
             )
             .await;
             match result {
-                Ok(_) => info!("Stored value: {:?}", state),
-                Err(_) => info!("Failed to store value"),
+                Ok(_) => info!("Stored state"),
+                Err(_) => info!("Failed to store state"),
             }
 
             old_state = state;
