@@ -1,4 +1,3 @@
-use edge_mdns::domain::dep::octseq::parse;
 use embassy_net::Stack;
 use embassy_time::Duration;
 use picoserve::{

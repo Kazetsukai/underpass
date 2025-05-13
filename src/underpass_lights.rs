@@ -1,6 +1,6 @@
 use core::cmp::max;
 
-use defmt::debug;
+use defmt::{debug, Format};
 use embassy_rp::dma::Channel;
 use embassy_rp::gpio::Pin;
 use embassy_rp::pio::PioPin;
@@ -31,7 +31,7 @@ const MAX_CAR_DISTANCE: i32 = 30000;
 
 // Positions of LEDs: 20mm, 75mm, 115mm, 170mm, 213mm, 268mm, 308mm, 363mm
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Copy, PartialEq)]
+#[derive(serde::Deserialize, serde::Serialize, Format, Clone, Copy, PartialEq)]
 pub enum LightingState {
     Off,
     SingleColour(RGB8),
@@ -178,7 +178,7 @@ impl<R: RngCore, T: PioPin> UnderpassLightsRunner<R, T> {
                         dirty = true;
 
                         if cycle % 500 == 10 {
-                            debug!("{}", cars[0]);
+                            debug!("Car: {}", cars[0]);
                             for i in 0..MAX_CARS {
                                 if cars[i].is_none() {
                                     cars[i] = Some(CarState {

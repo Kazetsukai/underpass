@@ -1,9 +1,10 @@
+use defmt::Format;
 use embassy_time::{Duration, Timer};
 use rand::RngCore;
 
 use crate::{pins::GpioPin, state::SharedStateMutex};
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Copy)]
+#[derive(serde::Deserialize, serde::Serialize, Format, Clone, Copy, PartialEq)]
 pub enum StreetlampMode {
     Off,
     On,

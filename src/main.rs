@@ -21,14 +21,19 @@ static DNS_SERVERS: [Ipv4Addr; 1] = [OUR_IP];
 
 const MTU: usize = 1514;
 
+const FLASH_SIZE: usize = 2 * 1024 * 1024; // 2MB
+const FLASH_SIZE_U32: u32 = FLASH_SIZE as u32;
+const FLASH_STORE_LOCATION: Range<u32> = (FLASH_SIZE_U32 - 128 * 1024)..FLASH_SIZE_U32; // 128KB
+
 use {
-    core::net::Ipv4Addr,
+    core::{net::Ipv4Addr, ops::Range},
     defmt::info,
     defmt_rtt as _,
     embassy_executor::Spawner,
     embassy_rp::{
         adc, bind_interrupts,
         clocks::RoscRng,
+        flash::Flash,
         gpio::{AnyPin, Level, Output},
         i2c::InterruptHandler,
         peripherals::{I2C1, PIN_8, PIO0, USB},
@@ -41,9 +46,13 @@ use {
     panic_probe as _,
     picoserve::make_static,
     rand::RngCore,
+    sequential_storage::{
+        cache::NoCache,
+        map::{fetch_item, store_item},
+    },
     smart_leds::RGB8,
     state::{AppState, SharedState, SharedStateMutex},
-    streetlamps::StreetlampsRunner,
+    streetlamps::{StreetlampMode, StreetlampsRunner},
 };
 
 bind_interrupts!(struct Irqs {
@@ -76,6 +85,13 @@ async fn main(spawner: Spawner) -> ! {
         })),
     );
 
+    let mut diag_lights = [
+        Output::new(p.PIN_16, Level::Low),
+        Output::new(p.PIN_17, Level::Low),
+        Output::new(p.PIN_18, Level::Low),
+        Output::new(p.PIN_19, Level::Low),
+    ];
+
     Timer::after_millis(100).await;
 
     // Generate random seed
@@ -102,6 +118,28 @@ async fn main(spawner: Spawner) -> ! {
     let usb = builder.build();
     let (app, config) = web::make_web_app();
 
+    let mut flash: Flash<'_, _, _, FLASH_SIZE> = Flash::new(p.FLASH, p.DMA_CH1);
+    let mut data_buffer = [0; 128];
+
+    let val = fetch_item::<u8, SharedState, _>(
+        &mut flash,
+        FLASH_STORE_LOCATION.clone(),
+        &mut NoCache::new(),
+        &mut data_buffer,
+        &1,
+    )
+    .await;
+    match val {
+        Ok(Some(val)) => {
+            info!("Fetched value: {:?}", val);
+            let SharedStateMutex(mutex) = shared_state;
+            let mut state = mutex.lock().await;
+            *state = val;
+        }
+        Err(err) => info!("Failed to fetch value: {:?}", err),
+        _ => info!("Failed to fetch value"),
+    }
+
     spawner.must_spawn(blinker(led, Duration::from_millis(500)));
 
     spawner.must_spawn(usb_task(usb));
@@ -109,9 +147,11 @@ async fn main(spawner: Spawner) -> ! {
 
     spawner.must_spawn(usb_ncm_task(ncm_runner));
     info!("USB NCM task started");
+    diag_lights[0].set_high();
 
     spawner.must_spawn(network::net_task(net_runner));
     info!("Network task started");
+    diag_lights[1].set_high();
 
     // Spawn network service tasks
     spawner.must_spawn(network::dhcp_task(stack));
@@ -119,6 +159,7 @@ async fn main(spawner: Spawner) -> ! {
 
     spawner.must_spawn(network::mdns_task(stack));
     info!("mDNS server task started");
+    diag_lights[2].set_high();
 
     for id in 0..web::WEB_TASK_POOL_SIZE {
         spawner.must_spawn(web::web_task(
@@ -145,9 +186,39 @@ async fn main(spawner: Spawner) -> ! {
             shared_state,
         ),
     ));
+    info!("Underpass lights task started");
+    diag_lights[3].set_high();
+
+    let mut old_state = {
+        let SharedStateMutex(mutex) = shared_state;
+        let state = mutex.lock().await;
+        state.clone()
+    };
 
     loop {
         Timer::after(Duration::from_secs(3)).await;
+        // Check if state has changed
+        let SharedStateMutex(mutex) = shared_state;
+        let state = { (*mutex.lock().await).clone() };
+        if state != old_state {
+            info!("State changed: {:?}", state);
+            // Update the flash memory with the new state
+            let result = store_item::<u8, SharedState, _>(
+                &mut flash,
+                FLASH_STORE_LOCATION.clone(),
+                &mut NoCache::new(),
+                &mut data_buffer,
+                &1,
+                &state,
+            )
+            .await;
+            match result {
+                Ok(_) => info!("Stored value: {:?}", state),
+                Err(_) => info!("Failed to store value"),
+            }
+
+            old_state = state;
+        }
     }
 }
 

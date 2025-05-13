@@ -63,3 +63,6 @@ edge-nal-embassy = "0.5"
 edge-nal = "0.5"
 edge-captive = "0.5"
 smart-leds = { version = "0.4.0", features = ["serde"] }
+sequential-storage = { version = "4.0.1", features = ["heapless", "defmt-03"] }
+bincode = { version = "2.0.1", default-features = false, features = ["serde"] }
+rgb = { version = "0.8.50", features = ["defmt-03", "serde"] }
