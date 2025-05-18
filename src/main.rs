@@ -79,9 +79,7 @@ async fn main(spawner: Spawner) -> ! {
                 streetlamps::StreetlampMode::On,
                 streetlamps::StreetlampMode::On,
             ],
-            underpass_lights_state: underpass_lights::LightingState::Cars {
-                default_color: RGB8::new(40, 20, 2),
-            }
+            underpass_lights_state: underpass_lights::LightingState::Cars {default_color:RGB8::new(40,20,2), min_interval: 20 , max_interval: 500, speed_limit_kph: 100 }
         })),
     );
 
