@@ -4,12 +4,12 @@ use picoserve::{
     extract::{self, State},
     make_static,
     response::{json, File, IntoResponse},
-    routing::{get, get_service, parse_path_segment, post},
+    routing::{get, get_service, parse_path_segment, post, put},
     AppRouter, AppWithStateBuilder, Config,
 };
 
 use crate::{
-    state::{AppState, SharedStateMutex},
+    state::{AppState, SharedState, SharedStateMutex},
     streetlamps,
 };
 
@@ -23,6 +23,15 @@ pub async fn get_state(
     extract::State(SharedStateMutex(shared)): extract::State<SharedStateMutex>,
 ) -> impl IntoResponse {
     json::Json(shared.lock().await.clone())
+}
+
+pub async fn set_state(
+    extract::State(SharedStateMutex(shared)): extract::State<SharedStateMutex>,
+    json::Json(state): json::Json<SharedState>,
+) -> impl IntoResponse {
+    let mut shared = shared.lock().await;
+    *shared = state;
+    json::Json(shared.clone())
 }
 
 impl AppWithStateBuilder for AppProps {
@@ -41,7 +50,7 @@ impl AppWithStateBuilder for AppProps {
                 )),
             )
             .route("/script.js", get_service(File::javascript(SCRIPT_JS)))
-            .route("/state", get(get_state))
+            .route("/state", get(get_state).put(set_state))
             .route(
                 "/power",
                 post(

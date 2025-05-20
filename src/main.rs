@@ -103,12 +103,12 @@ async fn main(spawner: Spawner) -> ! {
     let (net_runner, stack) = network::make_network_stack(device, seed);
     let streetlamps_runner = streetlamps::StreetlampsRunner::new(
         [
-            Output::new(p.PIN_2, Level::Low),
-            Output::new(p.PIN_3, Level::Low),
-            Output::new(p.PIN_4, Level::Low),
-            Output::new(p.PIN_5, Level::Low),
-            Output::new(p.PIN_6, Level::Low),
             Output::new(p.PIN_7, Level::Low),
+            Output::new(p.PIN_6, Level::Low),
+            Output::new(p.PIN_5, Level::Low),
+            Output::new(p.PIN_4, Level::Low),
+            Output::new(p.PIN_3, Level::Low),
+            Output::new(p.PIN_2, Level::Low),
         ],
         RoscRng,
         shared_state,
