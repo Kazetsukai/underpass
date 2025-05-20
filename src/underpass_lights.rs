@@ -36,7 +36,7 @@ pub enum LightingState {
     Off,
     SingleColour(RGB8),
     RainbowCycle,
-    Cars { 
+    Cars {
         default_color: RGB8,
         min_interval: u16,
         max_interval: u16,
@@ -113,7 +113,7 @@ impl<R: RngCore, T: PioPin> UnderpassLightsRunner<R, T> {
         let mut ticker = Ticker::every(Duration::from_millis(10));
         let mut dirty = true;
         let mut last_state = LightingState::Off;
-        let mut next_car_spawn_cycle: u16 = 10;
+        let mut next_car_spawn_delay: u16 = 10;
         loop {
             let SharedStateMutex(mutex) = self.shared_state;
             {
@@ -128,7 +128,7 @@ impl<R: RngCore, T: PioPin> UnderpassLightsRunner<R, T> {
                             dirty = true;
                         }
                     }
-                LightingState::SingleColour(colour) => {
+                    LightingState::SingleColour(colour) => {
                         if last_state != state.underpass_lights_state {
                             for i in 0..NUM_LEDS {
                                 data[i] = colour;
@@ -145,7 +145,12 @@ impl<R: RngCore, T: PioPin> UnderpassLightsRunner<R, T> {
                         }
                         dirty = true;
                     }
-                    LightingState::Cars { default_color, min_interval, max_interval, speed_limit_kph } => {
+                    LightingState::Cars {
+                        default_color,
+                        min_interval,
+                        max_interval,
+                        speed_limit_kph,
+                    } => {
                         car_light = [RGB8::default(); NUM_LEDS];
 
                         for car_state in cars.iter_mut() {
@@ -166,15 +171,29 @@ impl<R: RngCore, T: PioPin> UnderpassLightsRunner<R, T> {
                                     if car_front > led_pos - MAX_CAR_DISTANCE
                                         && car_front < led_pos + MAX_CAR_DISTANCE
                                     {
-                                        let dist = (car_front - led_pos).abs().min(MAX_CAR_DISTANCE);
-                                        let power: u8 = (80 * clamp(MAX_CAR_DISTANCE - dist, 0, MAX_CAR_DISTANCE) / MAX_CAR_DISTANCE) as u8;
-                                        let falloff_power: u8 = (80 * clamp(MAX_CAR_DISTANCE - dist * 4, 0, MAX_CAR_DISTANCE) / MAX_CAR_DISTANCE) as u8;
+                                        let dist =
+                                            (car_front - led_pos).abs().min(MAX_CAR_DISTANCE);
+                                        let power: u8 = (80
+                                            * clamp(MAX_CAR_DISTANCE - dist, 0, MAX_CAR_DISTANCE)
+                                            / MAX_CAR_DISTANCE)
+                                            as u8;
+                                        let falloff_power: u8 =
+                                            (80 * clamp(
+                                                MAX_CAR_DISTANCE - dist * 4,
+                                                0,
+                                                MAX_CAR_DISTANCE,
+                                            ) / MAX_CAR_DISTANCE)
+                                                as u8;
                                         //info!("car_front: {} led_pos: {} dist: {} power: {}", car_front, led_pos, dist, power);
                                         if car_front > led_pos {
                                             let c = RGB8::new(power, power, power / 3);
                                             add_rgb_saturating(&mut car_light[led_idx], c);
                                         } else {
-                                            let c = RGB8::new(falloff_power, falloff_power, falloff_power / 3);
+                                            let c = RGB8::new(
+                                                falloff_power,
+                                                falloff_power,
+                                                falloff_power / 3,
+                                            );
                                             add_rgb_saturating(&mut car_light[led_idx], c);
                                         }
                                     }
@@ -184,8 +203,17 @@ impl<R: RngCore, T: PioPin> UnderpassLightsRunner<R, T> {
                                         && car_back < led_pos + MAX_CAR_DISTANCE
                                     {
                                         let dist = (car_back - led_pos).abs().min(MAX_CAR_DISTANCE);
-                                        let power: u8 = (80 * clamp(MAX_CAR_DISTANCE - dist, 0, MAX_CAR_DISTANCE) / MAX_CAR_DISTANCE) as u8;
-                                        let falloff_power: u8 = (80 * clamp(MAX_CAR_DISTANCE - dist * 4, 0, MAX_CAR_DISTANCE) / MAX_CAR_DISTANCE) as u8;
+                                        let power: u8 = (80
+                                            * clamp(MAX_CAR_DISTANCE - dist, 0, MAX_CAR_DISTANCE)
+                                            / MAX_CAR_DISTANCE)
+                                            as u8;
+                                        let falloff_power: u8 =
+                                            (80 * clamp(
+                                                MAX_CAR_DISTANCE - dist * 4,
+                                                0,
+                                                MAX_CAR_DISTANCE,
+                                            ) / MAX_CAR_DISTANCE)
+                                                as u8;
                                         if car_back < led_pos {
                                             let c = RGB8::new(falloff_power, 0, 0);
                                             add_rgb_saturating(&mut car_light[led_idx], c);
@@ -210,7 +238,7 @@ impl<R: RngCore, T: PioPin> UnderpassLightsRunner<R, T> {
                         }
                         dirty = true;
 
-                        if cycle > next_car_spawn_cycle && cycle < next_car_spawn_cycle.wrapping_add(10) {
+                        if next_car_spawn_delay == 0 {
                             //debug!("Car: {}", cars[0]);
                             for i in 0..MAX_CARS {
                                 if cars[i].is_none() {
@@ -224,13 +252,18 @@ impl<R: RngCore, T: PioPin> UnderpassLightsRunner<R, T> {
                                         speed,
                                         lane: (self.rng.next_u32() % NUM_LANES as u32) as u8,
                                     });
-                                    // Set next spawn cycle to a random number between min_interval and max_interval
-                                    let interval = min_interval + (self.rng.next_u32() % ((max_interval - min_interval + 1) as u32)) as u16;
-                                    next_car_spawn_cycle = cycle.wrapping_add(interval);
                                     break;
                                 }
                             }
+
+                            // Set spawn delay to a random number between min_interval and max_interval
+                            let interval = min_interval
+                                + (self.rng.next_u32() % ((max_interval - min_interval + 1) as u32))
+                                    as u16;
+                            next_car_spawn_delay = interval;
                         }
+
+                        next_car_spawn_delay = next_car_spawn_delay.saturating_sub(1);
                     }
                 }
 
