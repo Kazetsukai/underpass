@@ -125,7 +125,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const cars = mode.Cars;
       // Default color
       const labelColor = document.createElement("label");
-      labelColor.textContent = "Default Colour: ";
+      labelColor.textContent = "Default Light Colour: ";
       const inputColor = document.createElement("input");
       inputColor.type = "color";
       inputColor.id = "underpassCarsColour";
@@ -134,7 +134,7 @@ document.addEventListener("DOMContentLoaded", function () {
       paramsDiv.appendChild(labelColor);
       // Min interval
       const labelMin = document.createElement("label");
-      labelMin.textContent = "Min Interval: ";
+      labelMin.textContent = "Min Time Between Cars (ms): ";
       const inputMin = document.createElement("input");
       inputMin.type = "number";
       inputMin.id = "underpassCarsMin";
@@ -143,7 +143,7 @@ document.addEventListener("DOMContentLoaded", function () {
       paramsDiv.appendChild(labelMin);
       // Max interval
       const labelMax = document.createElement("label");
-      labelMax.textContent = "Max Interval: ";
+      labelMax.textContent = "Max Time Between Cars (ms): ";
       const inputMax = document.createElement("input");
       inputMax.type = "number";
       inputMax.id = "underpassCarsMax";
@@ -224,9 +224,9 @@ document.addEventListener("DOMContentLoaded", function () {
           newState.underpass_lights_state = { SingleColour: color };
         } else if (mode === "Cars") {
           let default_color = { r: 40, g: 20, b: 2 };
-          let min_interval = 10;
-          let max_interval = 30;
-          let speed_limit_kph = 30;
+          let min_interval = 20;
+          let max_interval = 500;
+          let speed_limit_kph = 100;
           const colorInput = document.getElementById("underpassCarsColour");
           const minInput = document.getElementById("underpassCarsMin");
           const maxInput = document.getElementById("underpassCarsMax");
